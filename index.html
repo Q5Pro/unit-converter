@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Birim Dönüştürücü</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #e1e4e9;
+    --text: #1c1e21;
+    --text-dim: #6b7280;
+    --accent: #0891b2;
+    --accent-soft: #0891b212;
+    --mono: 'SF Mono', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 40px 20px 60px;
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  header { margin-bottom: 24px; text-align: center; }
+  header h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; }
+  header p { color: var(--text-dim); font-size: 13.5px; margin: 0; }
+
+  .category-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .cat-tab {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 99px;
+    padding: 7px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .cat-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .converter-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+  }
+
+  .convert-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .input-group label {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .input-group input {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 12px 14px;
+    font-size: 18px;
+    font-family: var(--mono);
+    width: 100%;
+  }
+
+  .input-group select {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 13.5px;
+    background: white;
+    cursor: pointer;
+  }
+
+  .swap-btn {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: none;
+    border-radius: 9px;
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 18px;
+    flex-shrink: 0;
+  }
+
+  .swap-btn:hover { background: var(--accent); color: white; }
+
+  .quick-ref {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .quick-ref .title { font-weight: 600; margin-bottom: 8px; color: var(--text); }
+
+  .quick-ref-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📐 Birim Dönüştürücü</h1>
+    <p>Uzunluk, ağırlık, sıcaklık, hacim ve daha fazlası için hızlı dönüşüm</p>
+  </header>
+
+  <div class="category-tabs" id="category-tabs"></div>
+
+  <div class="converter-panel">
+    <div class="convert-row">
+      <div class="input-group">
+        <label>Değer</label>
+        <input type="number" id="input-value" value="1" step="any">
+        <select id="from-unit"></select>
+      </div>
+
+      <button class="swap-btn" id="swap-btn" title="Birimleri değiştir">⇄</button>
+
+      <div class="input-group">
+        <label>Sonuç</label>
+        <input type="text" id="output-value" readonly>
+        <select id="to-unit"></select>
+      </div>
+    </div>
+
+    <div class="quick-ref" id="quick-ref"></div>
+  </div>
+</div>
+
+<script>
+// Her kategori için birimler, baz birime göre çarpan (linear) olarak
+// tanımlanır. Sıcaklık özel bir durum çünkü dönüşüm doğrusal değil
+// (offset içerir), bu yüzden ayrı fonksiyonlarla işlenir.
+
+const CATEGORIES = {
+  length: {
+    label: 'Uzunluk',
+    baseUnit: 'm',
+    units: {
+      mm: { label: 'Milimetre', factor: 0.001 },
+      cm: { label: 'Santimetre', factor: 0.01 },
+      m: { label: 'Metre', factor: 1 },
+      km: { label: 'Kilometre', factor: 1000 },
+      inch: { label: 'İnç', factor: 0.0254 },
+      ft: { label: 'Fit', factor: 0.3048 },
+      yard: { label: 'Yarda', factor: 0.9144 },
+      mile: { label: 'Mil', factor: 1609.344 },
+    },
+  },
+  weight: {
+    label: 'Ağırlık',
+    baseUnit: 'kg',
+    units: {
+      mg: { label: 'Miligram', factor: 0.000001 },
+      g: { label: 'Gram', factor: 0.001 },
+      kg: { label: 'Kilogram', factor: 1 },
+      ton: { label: 'Ton', factor: 1000 },
+      oz: { label: 'Ons', factor: 0.0283495 },
+      lb: { label: 'Pound', factor: 0.453592 },
+    },
+  },
+  temperature: {
+    label: 'Sıcaklık',
+    baseUnit: 'celsius',
+    units: {
+      celsius: { label: 'Celsius (°C)' },
+      fahrenheit: { label: 'Fahrenheit (°F)' },
+      kelvin: { label: 'Kelvin (K)' },
+    },
+  },
+  volume: {
+    label: 'Hacim',
+    baseUnit: 'liter',
+    units: {
+      ml: { label: 'Mililitre', factor: 0.001 },
+      liter: { label: 'Litre', factor: 1 },
+      gallon_us: { label: 'Galon (ABD)', factor: 3.78541 },
+      cup: { label: 'Su bardağı', factor: 0.236588 },
+      tbsp: { label: 'Yemek kaşığı', factor: 0.0147868 },
+      tsp: { label: 'Tatlı kaşığı', factor: 0.00492892 },
+    },
+  },
+  data: {
+    label: 'Veri Boyutu',
+    baseUnit: 'byte',
+    units: {
+      bit: { label: 'Bit', factor: 0.125 },
+      byte: { label: 'Byte', factor: 1 },
+      kb: { label: 'Kilobyte', factor: 1024 },
+      mb: { label: 'Megabyte', factor: 1024 ** 2 },
+      gb: { label: 'Gigabyte', factor: 1024 ** 3 },
+      tb: { label: 'Terabyte', factor: 1024 ** 4 },
+    },
+  },
+  speed: {
+    label: 'Hız',
+    baseUnit: 'ms',
+    units: {
+      ms: { label: 'm/s', factor: 1 },
+      kmh: { label: 'km/sa', factor: 0.277778 },
+      mph: { label: 'mil/sa', factor: 0.44704 },
+      knot: { label: 'Knot', factor: 0.514444 },
+    },
+  },
+};
+
+// Sıcaklık dönüşümü doğrusal olmadığından (offset içerir) özel fonksiyonlarla yapılır
+function temperatureToBase(value, unit) {
+  // Baz birim: Celsius
+  if (unit === 'celsius') return value;
+  if (unit === 'fahrenheit') return (value - 32) * (5 / 9);
+  if (unit === 'kelvin') return value - 273.15;
+}
+
+function temperatureFromBase(celsiusValue, unit) {
+  if (unit === 'celsius') return celsiusValue;
+  if (unit === 'fahrenheit') return celsiusValue * (9 / 5) + 32;
+  if (unit === 'kelvin') return celsiusValue + 273.15;
+}
+
+function convert(value, fromUnit, toUnit, categoryKey) {
+  const category = CATEGORIES[categoryKey];
+
+  if (categoryKey === 'temperature') {
+    const baseValue = temperatureToBase(value, fromUnit);
+    return temperatureFromBase(baseValue, toUnit);
+  }
+
+  const fromFactor = category.units[fromUnit].factor;
+  const toFactor = category.units[toUnit].factor;
+  const baseValue = value * fromFactor;
+  return baseValue / toFactor;
+}
+
+// --- UI ---
+
+let currentCategory = 'length';
+
+const categoryTabs = document.getElementById('category-tabs');
+const fromUnitSelect = document.getElementById('from-unit');
+const toUnitSelect = document.getElementById('to-unit');
+const inputValue = document.getElementById('input-value');
+const outputValue = document.getElementById('output-value');
+const quickRef = document.getElementById('quick-ref');
+const swapBtn = document.getElementById('swap-btn');
+
+function renderCategoryTabs() {
+  categoryTabs.innerHTML = '';
+  Object.entries(CATEGORIES).forEach(([key, cat]) => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-tab' + (key === currentCategory ? ' active' : '');
+    btn.textContent = cat.label;
+    btn.addEventListener('click', () => {
+      currentCategory = key;
+      renderCategoryTabs();
+      renderUnitSelects();
+      updateConversion();
+    });
+    categoryTabs.appendChild(btn);
+  });
+}
+
+function renderUnitSelects() {
+  const category = CATEGORIES[currentCategory];
+  const unitKeys = Object.keys(category.units);
+
+  [fromUnitSelect, toUnitSelect].forEach((select) => {
+    select.innerHTML = '';
+    unitKeys.forEach((key) => {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = category.units[key].label;
+      select.appendChild(option);
+    });
+  });
+
+  fromUnitSelect.value = unitKeys[0];
+  toUnitSelect.value = unitKeys[1] || unitKeys[0];
+}
+
+function formatResult(value) {
+  if (!isFinite(value)) return '-';
+  // Çok büyük/küçük sayılarda bilimsel gösterim, diğerlerinde normal
+  if (Math.abs(value) >= 1e9 || (Math.abs(value) < 1e-6 && value !== 0)) {
+    return value.toExponential(4);
+  }
+  // Gereksiz ondalık sıfırları temizle ama hassasiyeti koru
+  return parseFloat(value.toFixed(6)).toString();
+}
+
+function updateConversion() {
+  const value = parseFloat(inputValue.value);
+  if (isNaN(value)) {
+    outputValue.value = '';
+    return;
+  }
+
+  const result = convert(value, fromUnitSelect.value, toUnitSelect.value, currentCategory);
+  outputValue.value = formatResult(result);
+
+  renderQuickRef(value);
+}
+
+function renderQuickRef(value) {
+  const category = CATEGORIES[currentCategory];
+  const fromUnit = fromUnitSelect.value;
+  const otherUnits = Object.keys(category.units).filter((u) => u !== fromUnit);
+
+  quickRef.innerHTML = `<div class="title">${value} ${category.units[fromUnit].label} eşittir:</div>`;
+  const grid = document.createElement('div');
+  grid.className = 'quick-ref-grid';
+
+  otherUnits.forEach((unit) => {
+    const result = convert(value, fromUnit, unit, currentCategory);
+    const item = document.createElement('div');
+    item.textContent = `${formatResult(result)} ${category.units[unit].label}`;
+    grid.appendChild(item);
+  });
+
+  quickRef.appendChild(grid);
+}
+
+swapBtn.addEventListener('click', () => {
+  const fromVal = fromUnitSelect.value;
+  const toVal = toUnitSelect.value;
+  fromUnitSelect.value = toVal;
+  toUnitSelect.value = fromVal;
+  updateConversion();
+});
+
+inputValue.addEventListener('input', updateConversion);
+fromUnitSelect.addEventListener('change', updateConversion);
+toUnitSelect.addEventListener('change', updateConversion);
+
+renderCategoryTabs();
+renderUnitSelects();
+updateConversion();
+</script>
+</body>
+</html>

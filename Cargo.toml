@@ -1,0 +1,9 @@
+[package]
+name = "unit-converter"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+[[bin]]
+name = "unit-converter"
+path = "src/main.rs"
+[dependencies]
